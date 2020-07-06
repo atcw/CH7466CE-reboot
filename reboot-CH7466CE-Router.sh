@@ -23,7 +23,6 @@ cookiejarfile=$(mktemp)
 outputfile=$(mktemp)
 tracefile=$(mktemp)
 
-
 DEBUG=false
 DEBUG=true
 
@@ -81,7 +80,7 @@ echo "Token ok."
 sleep 1s
 
 #### Login ##### --trace ${tracefile} --output ${outputfile} --output loginfile.txt
-curl  -v -i  -H "${USERAGENT}"   --cookie ${cookiejarfile} --cookie-jar ${cookiejarfile} "http://${HOST}/xml/setter.xml" -d "token=${SESSIONTOKEN}&fun=15&Username=${LOGINUSER}&Password=${LOGINPASSWORD}" -w "\n\n%{http_code}\n"   -H 'Accept: application/xml, text/xml, */*; q=0.01' -H 'X-Requested-With: XMLHttpRequest'  
+curl  -v -i  -H "${USERAGENT}" --trace ${tracefile} --output ${outputfile}  --cookie ${cookiejarfile} --cookie-jar ${cookiejarfile} "http://${HOST}/xml/setter.xml" -d "token=${SESSIONTOKEN}&fun=15&Username=${LOGINUSER}&Password=${LOGINPASSWORD}" -w "\n\n%{http_code}\n"   -H 'Accept: application/xml, text/xml, */*; q=0.01' -H 'X-Requested-With: XMLHttpRequest'  
 retrieveToken
 
 # Often the reply is just empty. No Status-Code is returned either.
@@ -96,7 +95,7 @@ retrieveToken
 	#cat ${outputfile}
 	#cat ${tracefile}
 REPLYSIZE=$(stat -c%s "${outputfile}")
-if [ ${REPLYSIZE} -gt 1000 ] # We are being 302'ed.
+if [ "${REPLYSIZE}" -gt "1000" ] # We are being 302'ed.
 then
 	echo "Can't login. There is a preexisting active session."
 	exit -1
@@ -108,7 +107,7 @@ then
 else
 	echo "Login failed. Reason:"
 	cat ${outputfile}
-	cat ${tracefile}
+	#cat ${tracefile}
 
 	exit -1
 fi
@@ -122,7 +121,8 @@ then
 	[[ "$reply" =~ $regex ]]
 	echo "Found:"
 	echo "${BASH_REMATCH[1]}"
-	
+	#append to cookiejarfile
+	echo "${HOST}\tFALSE\t/\tFALSE\t0\tSID\t${BASH_REMATCH[1]}">>${cookiejarfile}
 fi
 	
 
