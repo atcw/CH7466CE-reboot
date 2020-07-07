@@ -29,8 +29,8 @@ DEBUG=false #reboot
 
 function retrieveToken #( )
 {
-	SESSIONTOKEN=$(awk '/sessionToken/ { print $7 }' ${cookiejarfile})
-	echo "SESSIONTOKEN: " ${SESSIONTOKEN}
+	SESSIONTOKEN=$(awk '/sessionToken/ { print $7 }' "${cookiejarfile}")
+	echo "SESSIONTOKEN: " "${SESSIONTOKEN}"
 }
 
 function getRequest # $1:url
@@ -41,10 +41,10 @@ function getRequest # $1:url
 		-L `# follow location` \
 		-H "${USERAGENT}" \
 		--silent `# no progress bar` \
-		--trace-ascii ${tracefile} \
-		--output ${outputfile} `#no visible body output` \
-		--cookie ${cookiejarfile} `#read` \
-		--cookie-jar  ${cookiejarfile} `#write` \
+		--trace-ascii "${tracefile}" \
+		--output "${outputfile}" `#no visible body output` \
+		--cookie "${cookiejarfile}" `#read` \
+		--cookie-jar  "${cookiejarfile}" `#write` \
 		--location `#follow` \
 		--write-out "%{http_code}" `#Status-Code` \
 		"http://${HOST}/${1}" 
@@ -62,10 +62,10 @@ function postRequest # $1:url, $2:urlencoded-form-data
 		-H 'Accept: application/xml, text/xml, */*; q=0.01' \
 		-H 'X-Requested-With: XMLHttpRequest' \
 		--silent `# no progress bar` \
-		--trace-ascii ${tracefile} \
-		--output ${outputfile} `#no visible body output` \
-		--cookie ${cookiejarfile} `#read` \
-		--cookie-jar  ${cookiejarfile} `#write` \
+		--trace-ascii "${tracefile}" \
+		--output "${outputfile}" `#no visible body output` \
+		--cookie "${cookiejarfile}" `#read` \
+		--cookie-jar  "${cookiejarfile}" `#write` \
 		--location `#follow` \
 		--write-out "%{http_code}" `#Status-Code` \
 		"http://${HOST}/$1" \
@@ -81,7 +81,7 @@ do
 	#follow location header #no --cookie ${cookiejarfile} yet.
 	getRequest "" # gets root as in "/"
 	
-	echo Http-Status: $HTTPSTATUS
+	echo Http-Status: "$HTTPSTATUS"
 	#cat ${outputfile}
 	
 	### Login won't work without having requested "fun=3" (some info) before.
@@ -104,7 +104,7 @@ echo "Token ok."
 #### Login #####
 postRequest "xml/setter.xml" "fun=15&Username=${LOGINUSER}&Password=${LOGINPASSWORD}"
 
-echo Http-Status: $HTTPSTATUS
+echo Http-Status: "$HTTPSTATUS"
 
 # Often the reply is just empty. No Status-Code is returned either.
 # i.e. no outputfile gets written. This is especially true when 
@@ -119,28 +119,28 @@ REPLYSIZE=$(stat -c%s "${outputfile}")
 if [ "${REPLYSIZE}" -gt "1000" ] # We are being 302'ed and receive the full index.html.
 then
 	echo "Can't login. There is a preexisting active session. Please wait for it to expire."
-	exit -1
+	exit 1
 fi
 	
-if grep -q -e successful -e KDGchangePW ${outputfile};
+if grep -q -e successful -e KDGchangePW "${outputfile}";
 then
 	echo "Login successful"
 else
 	echo "Login failed. Reason:"
-	cat ${outputfile}
-	exit -1
+	cat "${outputfile}"
+	exit 1
 fi
 
 ### If password was not yet changed from default on router, 'SID' needs to be extracted and put into the cookiejarfile.
-if grep -q -e KDGchangePW ${outputfile};
+if grep -q -e KDGchangePW "${outputfile}";
 then
 	echo "Password not changed from default."
 	regex=';SID=([0-9]*)' #KDGchangePW;SID=599652352
-	reply=$(cat ${outputfile})
+	reply=$(cat "${outputfile}")
 	[[ "$reply" =~ $regex ]]
 	echo "Found SID: ${BASH_REMATCH[1]}"
 	#append to Netscape-style cookiejarfile
-	echo "${HOST}\tFALSE\t/\tFALSE\t0\tSID\t${BASH_REMATCH[1]}">>${cookiejarfile}
+	echo -e "${HOST}\tFALSE\t/\tFALSE\t0\tSID\t${BASH_REMATCH[1]}">>"${cookiejarfile}" #https://github.com/koalaman/shellcheck/wiki/SC2028 later
 fi
 	
 
@@ -156,14 +156,14 @@ then
 	
 
 	postRequest "xml/getter.xml" "fun=508"
-	reply=$(cat ${outputfile})
+	reply=$(cat "${outputfile}")
 
 	regex='<DateAndTimeEnable>([0-9])</DateAndTimeEnable>'
 	[[ "$reply" =~ $regex ]]
 	echo "Found DateAndTimeEnable: ${BASH_REMATCH[1]}"
 	toggleenable=${BASH_REMATCH[1]}
 	#invert to toggle
-	[ $toggleenable = "0" ] && toggleenable="1" || toggleenable="0";
+	[ "$toggleenable" = "0" ] && toggleenable="1" || toggleenable="0";
 	
 	postRequest "xml/setter.xml" "fun=509&Enable=${toggleenable}" 
 	
@@ -179,6 +179,6 @@ fi
 
 ### clean up ###
 
-rm -f ${cookiejarfile}
-rm -f ${outputfile}
-rm -f ${tracefile}
+rm -f "${cookiejarfile}"
+rm -f "${outputfile}"
+rm -f "${tracefile}"
