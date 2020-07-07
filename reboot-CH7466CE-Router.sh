@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Reboot your Cable Gateway / Router
-# For CBN - Compal Broadband Networks - CH7466CE - Wireless Voice Gateway - Firmware-Version  4.50.20.3 (above and earlier)
+# For 	 - Firmware-Version  4.50.20.3 (above and earlier)
 # Tested 2020-07-05 - with a German KabelDeutschlandGmbH(now Vodafone) provided (and probably customized) Router
 
 # Weirdness explained
@@ -33,57 +33,76 @@ function retrieveToken #( )
 	echo "SESSIONTOKEN: " ${SESSIONTOKEN}
 }
 
-#function getrequest
-#{
-#	curl  -i \ # show response headers
-#		-H "${USERAGENT}" \
-#		--silent \ # no progress bar
-#		--trace ${tracefile} \
-#		--output ${outputfile} \ #no visible body output
-#		--cookie ${cookiejarfile} \ #read
-#		--cookie-jar  ${cookiejarfile} \ #write
-#		--location \ #follow
-#		--write-out "%{http_code}" \
-#		"http://${HOST}/$1" 
-#	#cat ${cookiejarfile}
-#}
+function getRequest # $1:url
+{
+	sleep 1s
+	HTTPSTATUS=$( 
+	curl  -i `# show response headers` \
+		-L `# follow location` \
+		-H "${USERAGENT}" \
+		--silent `# no progress bar` \
+		--trace-ascii ${tracefile} \
+		--output ${outputfile} `#no visible body output` \
+		--cookie ${cookiejarfile} `#read` \
+		--cookie-jar  ${cookiejarfile} `#write` \
+		--location `#follow` \
+		--write-out "%{http_code}" `#Status-Code` \
+		"http://${HOST}/${1}" 
+	)
+	retrieveToken
+}
 
+function postRequest # $1:url, $2:urlencoded-form-data
+{
+	sleep 1s
+	HTTPSTATUS=$( 
+	curl  -i `# show response headers` \
+		-L `# follow location` \
+		-H "${USERAGENT}" \
+		-H 'Accept: application/xml, text/xml, */*; q=0.01' \
+		-H 'X-Requested-With: XMLHttpRequest' \
+		--silent `# no progress bar` \
+		--trace-ascii ${tracefile} \
+		--output ${outputfile} `#no visible body output` \
+		--cookie ${cookiejarfile} `#read` \
+		--cookie-jar  ${cookiejarfile} `#write` \
+		--location `#follow` \
+		--write-out "%{http_code}" `#Status-Code` \
+		"http://${HOST}/$1" \
+		-d "token=${SESSIONTOKEN}&${2}"
+	)
+	retrieveToken
+}
+
+#### Get a sessiontoken #####
 # Try until sessiontoken is properly generated. Requests are intentionally redundant.
 until [ "${SESSIONTOKEN}" != "0" ]
 do
 	#follow location header #no --cookie ${cookiejarfile} yet.
-	HTTPSTATUS=$(curl --silent -i -H "${USERAGENT}" --silent --trace ${tracefile} --output ${outputfile}  --cookie-jar  ${cookiejarfile} -L "http://${HOST}/" --write-out "%{http_code}" )
-	retrieveToken
+	getRequest "" # gets root as in "/"
+	
 	echo Http-Status: $HTTPSTATUS
 	#cat ${outputfile}
-	sleep 1s
-	### Login won't work without having requested "fun=3" before.
-	HTTPSTATUS=$(curl --silent -i -H "${USERAGENT}" --trace ${tracefile} --output ${outputfile} --cookie ${cookiejarfile} --cookie-jar  ${cookiejarfile} "http://${HOST}/xml/getter.xml" -d "token=${SESSIONTOKEN}&fun=3"  --write-out "%{http_code}" -H 'Accept: application/xml, text/xml, */*; q=0.01' -H 'X-Requested-With: XMLHttpRequest' )
 	
+	### Login won't work without having requested "fun=3" (some info) before.
+	postRequest "xml/getter.xml" "fun=3"
 	
-	sleep 1s
-	HTTPSTATUS=$(curl --silent -i -H "${USERAGENT}" --silent --trace ${tracefile} --output ${outputfile} --cookie ${cookiejarfile} --cookie-jar ${cookiejarfile} "http://${HOST}/common_page/login.html" --write-out "%{http_code}" )
-	retrieveToken
-	
+	getRequest "common_page/login.html"
 	
 	if [ "${SESSIONTOKEN}" == "0" ]
 		then
 			echo waiting 5 sec because the sessiontoken is still bad
 			sleep 5s
 			#Get a large picture to trigger state change on the router.
-			HTTPSTATUS=$(curl --silent -i -H "${USERAGENT}" --silent --trace ${tracefile} --output ${outputfile} --cookie ${cookiejarfile} --cookie-jar  ${cookiejarfile} -L "http://${HOST}/images/common_imgs/cbn_logo.png" --write-out "%{http_code}" )
-			retrieveToken
-			
+			getRequest "images/common_imgs/cbn_logo.png"
+
 	fi
 	echo "About to test token"
 done
 echo "Token ok."
 
-sleep 1s
-
-#### Login ##### --trace ${tracefile} --output ${outputfile} --output loginfile.txt
-HTTPSTATUS=$(curl -v -i --silent -H "${USERAGENT}" --trace ${tracefile} --output ${outputfile}  --cookie ${cookiejarfile} --cookie-jar ${cookiejarfile} "http://${HOST}/xml/setter.xml" -d "token=${SESSIONTOKEN}&fun=15&Username=${LOGINUSER}&Password=${LOGINPASSWORD}" --write-out "%{http_code}"   -H 'Accept: application/xml, text/xml, */*; q=0.01' -H 'X-Requested-With: XMLHttpRequest' )
-retrieveToken
+#### Login #####
+postRequest "xml/setter.xml" "fun=15&Username=${LOGINUSER}&Password=${LOGINPASSWORD}"
 
 echo Http-Status: $HTTPSTATUS
 
@@ -109,8 +128,6 @@ then
 else
 	echo "Login failed. Reason:"
 	cat ${outputfile}
-	#cat ${tracefile}
-
 	exit -1
 fi
 
@@ -118,51 +135,49 @@ fi
 if grep -q -e KDGchangePW ${outputfile};
 then
 	echo "Password not changed from default."
-	#KDGchangePW;SID=599652352
-	regex=';SID=([0-9]*)'
+	regex=';SID=([0-9]*)' #KDGchangePW;SID=599652352
 	reply=$(cat ${outputfile})
 	[[ "$reply" =~ $regex ]]
-	echo "Found:"
-	echo "${BASH_REMATCH[1]}"
+	echo "Found SID: ${BASH_REMATCH[1]}"
 	#append to Netscape-style cookiejarfile
 	echo "${HOST}\tFALSE\t/\tFALSE\t0\tSID\t${BASH_REMATCH[1]}">>${cookiejarfile}
 fi
 	
 
-if $DEBUG #toggle Telefony>Configuration>ShowDateAndTimeForCallerID
+### we are logged in ###
+
+### time for some actual work ###
+
+if $DEBUG #test toggling values
 then
 	#Result can be observed on http://${routerip}/voip_page/CbnMtaConfiguration.html
+	# 1 is off, 0 is on. Sic!
 	echo "Toggling Telefony>Configuration>ShowDateAndTimeForCallerID"
 	
-	sleep 1s
-	HTTPSTATUS= curl  -i --silent -H "${USERAGENT}" --trace ${tracefile} --output ${outputfile} --cookie ${cookiejarfile} --cookie-jar ${cookiejarfile} "http://${HOST}/xml/getter.xml" -d "token=${SESSIONTOKEN}&fun=508" --write-out "%{http_code}" -H 'Accept: application/xml, text/xml, */*; q=0.01' -H 'X-Requested-With: XMLHttpRequest' 
-	retrieveToken
+
+	postRequest "xml/getter.xml" "fun=508"
 	reply=$(cat ${outputfile})
-	echo $reply
-	echo "Endreply"
+
 	regex='<DateAndTimeEnable>([0-9])</DateAndTimeEnable>'
 	[[ "$reply" =~ $regex ]]
-	echo "Found:"
-	echo "${BASH_REMATCH[1]}"
+	echo "Found DateAndTimeEnable: ${BASH_REMATCH[1]}"
 	toggleenable=${BASH_REMATCH[1]}
-	#invert
+	#invert to toggle
 	[ $toggleenable = "0" ] && toggleenable="1" || toggleenable="0";
-	sleep 1s
-	HTTPSTATUS= curl --silent -i -H "${USERAGENT}" --trace ${tracefile} --output ${outputfile} --cookie ${cookiejarfile} --cookie-jar ${cookiejarfile} "http://${HOST}/xml/setter.xml" -d "token=${SESSIONTOKEN}&fun=509&Enable=${toggleenable}" --write-out "%{http_code}"   -H 'Accept: application/xml, text/xml, */*; q=0.01' -H 'X-Requested-With: XMLHttpRequest'  
-	retrieveToken
+	
+	postRequest "xml/setter.xml" "fun=509&Enable=${toggleenable}" 
 	
 	#Logout
-	HTTPSTATUS= curl --silent -i -H "${USERAGENT}" --trace ${tracefile} --output ${outputfile} --cookie ${cookiejarfile} --cookie-jar ${cookiejarfile} "http://${HOST}/xml/setter.xml" -d "token=${SESSIONTOKEN}&fun=16" --write-out "%{http_code}"   -H 'Accept: application/xml, text/xml, */*; q=0.01' -H 'X-Requested-With: XMLHttpRequest'  
-	retrieveToken
+	postRequest "xml/setter.xml" "fun=16"
+	
 fi
 
 if  ! $DEBUG #Reboot
 then
-	echo "Sending Reboot Command"
-	sleep 1s
-	HTTPSTATUS= curl --silent -i -H "${USERAGENT}" --trace ${tracefile} --cookie ${cookiejarfile} --cookie-jar ${cookiejarfile} "http://${HOST}/xml/setter.xml" -d "token=${SESSIONTOKEN}&fun=8" --write-out "%{http_code}"   -H 'Accept: application/xml, text/xml, */*; q=0.01' -H 'X-Requested-With: XMLHttpRequest'  
-	retrieveToken
+	postRequest "xml/setter.xml" "fun=8"
 fi
+
+### clean up ###
 
 rm -f ${cookiejarfile}
 rm -f ${outputfile}
